@@ -941,6 +941,14 @@ impl State {
     /// descriptors its tables hold.
     /// False if the draw or dispatch must not run: a root SRV it reads
     /// could not be given a view.
+    /// The host list's state no longer matches what the title set: the
+    /// pipeline, the root signatures and the heaps are set again on the next
+    /// bind. Used when something else recorded into the list (an external
+    /// effect, such as an upscaler, between two draws).
+    pub(crate) fn host_state_lost(&mut self) {
+        (self.host_pipeline, self.host_roots, self.host_heaps) = (0, [0; 2], [usize::MAX; 2]);
+    }
+
     pub(crate) fn bind(&mut self, list: &HostList, p: &HostPipeline, compute: bool) -> bool {
         let l = &list.list;
         // Textures picked by index, before anything asks for them.

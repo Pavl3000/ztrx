@@ -110,12 +110,36 @@ pub extern "system" fn CreateWindowExA(
     hwnd
 }
 
+/// The display mode the layer reports to the title (`VICTORY_DISPLAY_MODE`,
+/// parsed as `victory_gpu::dxgi` parses it). A title sizes its window to the
+/// console's render target (3840x2160 on a Series X) whatever mode it is
+/// told about, and then makes its swap chain the size of that window: with
+/// this set, the window is made the smaller size instead, so the title
+/// renders for the mode it was told about. On the prison yard that is 8.3
+/// Mpx a frame against 0.9 Mpx at 1280x720.
+fn display_mode() -> Option<(i32, i32)> {
+    static MODE: std::sync::OnceLock<Option<(i32, i32)>> = std::sync::OnceLock::new();
+    *MODE.get_or_init(|| {
+        let asked = std::env::var("VICTORY_DISPLAY_MODE").ok()?;
+        let (w, h) = asked.trim().split_once(['x', 'X'])?;
+        let w = w.trim().parse::<i32>().ok()?;
+        let h = h.trim().parse::<i32>().ok()?;
+        ((640..=7680).contains(&w) && (360..=4320).contains(&h)).then_some((w, h))
+    })
+}
+
 /// A console title sizes its window to its render target (
 /// the title: 3840x2160 on a Series X), which can exceed the host's screen.
 /// A top-level window larger than the work area is shrunk to fit, keeping
 /// its proportions, and centred; what it shows is scaled to it (the swap
 /// chain stretches).
 fn fit(parent: HWND, x: i32, y: i32, width: i32, height: i32) -> (i32, i32, i32, i32) {
+    // The mode the title was told about wins over the size it asks for, for
+    // top-level windows only: a child window follows its own parent.
+    let (width, height) = match display_mode() {
+        Some(mode) if parent.is_null() => mode,
+        _ => (width, height),
+    };
     let mut area = RECT::default();
     // SAFETY: `area` receives the primary monitor's work area.
     let known =
